@@ -11,17 +11,14 @@ left to the explicit tools in :class:`~langchain_bhived.BhivedToolkit`.
 from __future__ import annotations
 
 import logging
-import threading
-import time
-from collections import OrderedDict
 from typing import Any, Awaitable, Callable, Optional, Sequence
 
 from bhived import SCOPES, AsyncBhivedClient, BhivedClient, BhivedError, QueryResult
+from bhived.adapter import WRITE_TOOL_NAMES, FailureLog, RecallCache, clean_query
 from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from ._clients import BhivedClients
-from .tools import WRITE_TOOL_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +133,8 @@ class BhivedMiddleware(AgentMiddleware):
         self.cache_ttl = cache_ttl
         self.build_query = build_query
         self.raise_on_error = raise_on_error
-        self._cache: OrderedDict[str, tuple[float, QueryResult]] = OrderedDict()
-        self._lock = threading.Lock()
-        self._warned: set[str] = set()
+        self._cache = RecallCache(cache_size, cache_ttl)
+        self._failures = FailureLog(logger)
 
     # ── LangChain hooks ──────────────────────────────────────────────
 
@@ -150,14 +146,14 @@ class BhivedMiddleware(AgentMiddleware):
         query = self._query_text(request)
         if query is None:
             return handler(request)
-        result = self._cached(query)
+        result = self._cache.get(query)
         if result is None:
             try:
                 result = self.clients.sync.query(query, **self._query_kwargs())
             except BhivedError as exc:
                 self._recall_failed(exc)
             else:
-                self._store(query, result)
+                self._cache.put(query, result)
         return handler(self._with_lessons(request, result))
 
     async def awrap_model_call(
@@ -168,26 +164,21 @@ class BhivedMiddleware(AgentMiddleware):
         query = self._query_text(request)
         if query is None:
             return await handler(request)
-        result = self._cached(query)
+        result = self._cache.get(query)
         if result is None:
             try:
                 result = await self.clients.async_.query(query, **self._query_kwargs())
             except BhivedError as exc:
                 self._recall_failed(exc)
             else:
-                self._store(query, result)
+                self._cache.put(query, result)
         return await handler(self._with_lessons(request, result))
 
     # ── Helpers ──────────────────────────────────────────────────────
 
     def _query_text(self, request: ModelRequest) -> Optional[str]:
         text = self.build_query(request) if self.build_query else latest_user_text(request.messages)
-        if not text:
-            return None
-        text = text.strip()
-        if len(text) < self.min_query_chars:
-            return None
-        return text[: self.max_query_chars]
+        return clean_query(text, min_chars=self.min_query_chars, max_chars=self.max_query_chars)
 
     def _query_kwargs(self) -> dict[str, Any]:
         # Episodes and disputed pairs are not shown in the block, so don't ask for them.
@@ -220,31 +211,4 @@ class BhivedMiddleware(AgentMiddleware):
     def _recall_failed(self, exc: BhivedError) -> None:
         if self.raise_on_error:
             raise exc
-        # Warn once per kind of failure; a missing key would otherwise log on every model call.
-        kind = type(exc).__name__
-        level = logging.DEBUG if kind in self._warned else logging.WARNING
-        self._warned.add(kind)
-        logger.log(level, "bhived recall skipped (%s): %s", kind, exc)
-
-    def _cached(self, query: str) -> Optional[QueryResult]:
-        if self.cache_size <= 0:
-            return None
-        with self._lock:
-            entry = self._cache.get(query)
-            if entry is None:
-                return None
-            stored_at, result = entry
-            if time.monotonic() - stored_at > self.cache_ttl:
-                del self._cache[query]
-                return None
-            self._cache.move_to_end(query)
-            return result
-
-    def _store(self, query: str, result: QueryResult) -> None:
-        if self.cache_size <= 0:
-            return
-        with self._lock:
-            self._cache[query] = (time.monotonic(), result)
-            self._cache.move_to_end(query)
-            while len(self._cache) > self.cache_size:
-                self._cache.popitem(last=False)
+        self._failures.report(exc)

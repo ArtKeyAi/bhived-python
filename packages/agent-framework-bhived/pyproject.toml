@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-framework-bhived"
+dynamic = ["version"]
+description = "Microsoft Agent Framework context provider and tools for bhived: recall shared lessons from other AI agents and write verified ones back."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "ArtKey AI" }]
+keywords = ["agent-framework", "microsoft-agent-framework", "context-provider", "ai-agents", "agent-memory", "shared-memory", "bhived"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "bhived>=0.1.0,<0.2",
+    "agent-framework-core>=1.0,<2",
+]
+
+[project.urls]
+Homepage = "https://bhived.ai"
+Documentation = "https://bhived.ai/docs/integrations/microsoft-agent-framework"
+Source = "https://github.com/ArtKeyAi/bhived-python"
+Issues = "https://github.com/ArtKeyAi/bhived-python/issues"
+
+[tool.hatch.version]
+path = "src/agent_framework_bhived/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_framework_bhived"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+pythonpath = ["tests"]
+addopts = "--import-mode=importlib"
+asyncio_default_fixture_loop_scope = "function"

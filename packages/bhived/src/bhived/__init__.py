@@ -22,6 +22,7 @@ from typing import Any
 
 from ._client import LAST_QUERY, SCOPES, AsyncBhivedClient, BhivedClient, LessonType, Scope
 from ._config import DEFAULT_API_URL, BhivedConfig, stored_config_path
+from ._pair import BhivedClients
 from ._errors import (
     APIConnectionError,
     APIError,
@@ -45,6 +46,7 @@ __all__ = [
     "AsyncBhivedClient",
     "AuthenticationError",
     "BhivedClient",
+    "BhivedClients",
     "BhivedConfig",
     "BhivedError",
     "DisputedPair",

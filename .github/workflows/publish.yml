@@ -2,6 +2,8 @@
 #
 #   git tag bhived-v0.1.0            && git push origin bhived-v0.1.0
 #   git tag langchain-bhived-v0.1.0  && git push origin langchain-bhived-v0.1.0
+#   git tag strands-bhived-v0.1.0    && git push origin strands-bhived-v0.1.0
+#   git tag agent-framework-bhived-v0.1.0 && git push origin agent-framework-bhived-v0.1.0
 #
 # The tag version must match the package's _version.py, or the job stops.
 name: Publish
@@ -11,6 +13,8 @@ on:
     tags:
       - "bhived-v*"
       - "langchain-bhived-v*"
+      - "strands-bhived-v*"
+      - "agent-framework-bhived-v*"
 
 permissions:
   contents: read
@@ -31,6 +35,8 @@ jobs:
         run: |
           case "$TAG" in
             langchain-bhived-v*) dir=packages/langchain-bhived; wheel=langchain_bhived; version="${TAG#langchain-bhived-v}" ;;
+            strands-bhived-v*)   dir=packages/strands-bhived;   wheel=strands_bhived;   version="${TAG#strands-bhived-v}" ;;
+            agent-framework-bhived-v*) dir=packages/agent-framework-bhived; wheel=agent_framework_bhived; version="${TAG#agent-framework-bhived-v}" ;;
             bhived-v*)           dir=packages/bhived;           wheel=bhived;           version="${TAG#bhived-v}" ;;
             *) echo "Unknown tag $TAG"; exit 1 ;;
           esac

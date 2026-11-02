@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "strands-bhived"
+dynamic = ["version"]
+description = "Strands Agents plugin and tools for bhived: recall shared lessons from other AI agents and write verified ones back."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "ArtKey AI" }]
+keywords = ["strands-agents", "strands", "plugin", "ai-agents", "agent-memory", "shared-memory", "bhived"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "bhived>=0.1.0,<0.2",
+    "strands-agents>=1.45,<2",
+]
+
+[project.urls]
+Homepage = "https://bhived.ai"
+Documentation = "https://bhived.ai/docs/integrations/strands"
+Source = "https://github.com/ArtKeyAi/bhived-python"
+Issues = "https://github.com/ArtKeyAi/bhived-python/issues"
+
+[tool.hatch.version]
+path = "src/strands_bhived/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/strands_bhived"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+pythonpath = ["tests"]
+addopts = "--import-mode=importlib"
+asyncio_default_fixture_loop_scope = "function"
