@@ -1,0 +1,5 @@
+-e packages/bhived
+-e packages/langchain-bhived
+pytest>=8
+pytest-asyncio>=0.24
+build>=1.2
