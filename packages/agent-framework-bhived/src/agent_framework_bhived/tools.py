@@ -5,11 +5,17 @@ key a write goes to the public shared lessons, so the write tool descriptions
 spell out what must never go into a lesson. If you want a person to confirm
 every write, pass ``write_approval_mode="always_require"``. Errors come back to
 the model as the tool result instead of ending the run.
+
+Each tool gets an explicit pydantic input model instead of relying on
+``Annotated`` hints. On Python 3.10, ``typing.get_type_hints`` wraps a
+parameter that defaults to ``None`` in an extra ``Optional[...]``, which hides
+the ``Annotated`` description, so every optional parameter would reach the
+model without one.
 """
 
-# No `from __future__ import annotations` here: @tool reads the parameter
-# annotations, and the write tools build theirs from a local variable.
-from typing import Annotated, Any, Literal, Optional
+from __future__ import annotations
+
+from typing import Any, Literal, Optional
 
 from agent_framework import FunctionTool, tool
 from bhived import AsyncBhivedClient, BhivedClient, BhivedError
@@ -24,11 +30,32 @@ from bhived.adapter import (
     query_error_message,
     write_error_message,
 )
+from pydantic import BaseModel, Field, create_model
 
 from ._clients import BhivedClients
 
 Scope = Literal["team_plus_global", "team_only", "global_only"]
 ApprovalMode = Literal["always_require", "never_require"]
+
+
+class BhivedQueryInput(BaseModel):
+    query: str = Field(min_length=1, description=QUERY_PARAMS["query"])
+    context: Optional[str] = Field(default=None, description=QUERY_PARAMS["context"])
+    top_k: int = Field(default=5, ge=1, le=100, description=QUERY_PARAMS["top_k"])
+    scope: Optional[Scope] = Field(default=None, description=QUERY_PARAMS["scope"])
+
+
+def _write_input(lesson_type: str) -> type[BaseModel]:
+    """The input model for one write tool. Only supersedes_id and action differ by type."""
+    return create_model(
+        f"BhivedWrite{lesson_type.capitalize()}Input",
+        text=(str, Field(min_length=1, description=WRITE_PARAMS["text"])),
+        title=(str, Field(min_length=1, max_length=100, description=WRITE_PARAMS["title"])),
+        query_id=(Optional[str], Field(default=None, description=WRITE_PARAMS["query_id"])),
+        model=(Optional[str], Field(default=None, description=WRITE_PARAMS["model"])),
+        supersedes_id=(Optional[str], Field(default=None, description=SUPERSEDES_PARAMS[lesson_type])),
+        action=(Literal["new", "update"], Field(default="new", description=ACTION_PARAMS[lesson_type])),
+    )
 
 
 def bhived_tools(
@@ -49,12 +76,11 @@ def bhived_tools(
     """
     clients = clients or BhivedClients(api_key=api_key, api_url=api_url, client=client, async_client=async_client)
 
-    @tool(name=QUERY_TOOL_NAME, description=QUERY_DESCRIPTION)
     async def bhived_query(
-        query: Annotated[str, QUERY_PARAMS["query"]],
-        context: Annotated[Optional[str], QUERY_PARAMS["context"]] = None,
-        top_k: Annotated[int, QUERY_PARAMS["top_k"]] = 5,
-        scope: Annotated[Optional[Scope], QUERY_PARAMS["scope"]] = None,
+        query: str,
+        context: Optional[str] = None,
+        top_k: int = 5,
+        scope: Optional[Scope] = None,
     ) -> str:
         try:
             result = await clients.async_.query(query, context=context, top_k=top_k, scope=scope)
@@ -62,7 +88,9 @@ def bhived_tools(
             return query_error_message(exc)
         return result.to_markdown()
 
-    tools: list[FunctionTool] = [bhived_query]
+    tools: list[FunctionTool] = [
+        tool(bhived_query, name=QUERY_TOOL_NAME, description=QUERY_DESCRIPTION, schema=BhivedQueryInput)
+    ]
     if not read_only:
         tools += [
             _write_tool(clients, lesson_type, write_approval_mode)
@@ -72,18 +100,13 @@ def bhived_tools(
 
 
 def _write_tool(clients: BhivedClients, lesson_type: str, approval_mode: Optional[ApprovalMode]) -> FunctionTool:
-    @tool(
-        name=f"bhived_write_{lesson_type}",
-        description=WRITE_DESCRIPTIONS[lesson_type],
-        approval_mode=approval_mode,
-    )
     async def write(
-        text: Annotated[str, WRITE_PARAMS["text"]],
-        title: Annotated[str, WRITE_PARAMS["title"]],
-        query_id: Annotated[Optional[str], WRITE_PARAMS["query_id"]] = None,
-        model: Annotated[Optional[str], WRITE_PARAMS["model"]] = None,
-        supersedes_id: Annotated[Optional[str], SUPERSEDES_PARAMS[lesson_type]] = None,
-        action: Annotated[Literal["new", "update"], ACTION_PARAMS[lesson_type]] = "new",
+        text: str,
+        title: str,
+        query_id: Optional[str] = None,
+        model: Optional[str] = None,
+        supersedes_id: Optional[str] = None,
+        action: Literal["new", "update"] = "new",
     ) -> str:
         method: Any = getattr(clients.async_, f"write_{lesson_type}")
         try:
@@ -96,4 +119,10 @@ def _write_tool(clients: BhivedClients, lesson_type: str, approval_mode: Optiona
             return write_error_message(lesson_type, exc)
         return result.to_markdown()
 
-    return write
+    return tool(
+        write,
+        name=f"bhived_write_{lesson_type}",
+        description=WRITE_DESCRIPTIONS[lesson_type],
+        schema=_write_input(lesson_type),
+        approval_mode=approval_mode,
+    )

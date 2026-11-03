@@ -43,6 +43,15 @@ def test_descriptions_and_schema() -> None:
     assert "YOUR OWN earlier mistake" in schema["properties"]["supersedes_id"]["description"]
 
 
+def test_every_parameter_has_a_description() -> None:
+    # Python 3.10 used to drop these for every parameter that defaults to None.
+    for name, t in tools_by_name(FakeAPI()).items():
+        for param, spec in t.parameters()["properties"].items():
+            assert spec.get("description"), f"{name}.{param} has no description"
+    title = tools_by_name(FakeAPI())["bhived_write_update"].parameters()["properties"]["title"]
+    assert title["maxLength"] == 100
+
+
 @pytest.mark.asyncio
 async def test_query_and_writes() -> None:
     api = FakeAPI(ok(QUERY_RESPONSE), ok(WRITE_RESPONSE), ok(WRITE_RESPONSE))

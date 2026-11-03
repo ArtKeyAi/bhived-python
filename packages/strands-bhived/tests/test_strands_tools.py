@@ -36,6 +36,13 @@ def test_write_descriptions_carry_the_privacy_rules() -> None:
             assert phrase in description, (name, phrase)
 
 
+def test_every_parameter_has_a_description() -> None:
+    # Guards the Python 3.10 case where Optional parameters can lose their Annotated text.
+    for name, t in tools_by_name(FakeAPI()).items():
+        for param, spec in t.tool_spec["inputSchema"]["json"]["properties"].items():
+            assert spec.get("description"), f"{name}.{param} has no description"
+
+
 @pytest.mark.asyncio
 async def test_query_tool_output() -> None:
     api = FakeAPI(ok(QUERY_RESPONSE))
